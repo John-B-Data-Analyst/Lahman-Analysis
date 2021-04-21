@@ -1,0 +1,331 @@
+---
+title: "Data Analysis of the Lahman Baseball Database"
+author: "John Blee"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(Lahman)
+library(lubridate)
+library
+```
+
+
+***
+
+# Problem 1
+
+***
+
+Consider the four main tables in the Lahman package: Master, Batting, Pitching, and Fielding. Identify the primary keys for each of these tables.
+
+The primary key for the Batting table consists of the variables: playerID, yearID, and stint. This can be verified by filtering by these three variables and checking if this combination of variables occurs more than once in the table. The code below shows that it does not.
+
+```{r, q1.1}
+Batting %>%
+      count(playerID, yearID, stint) %>%
+      filter(n > 1)
+```
+
+The primary key for the Master table is simply the ‘playerID’ variable.
+
+```{r, q1.2}
+Master %>%
+      count(playerID) %>%
+      filter(n > 1)
+```
+
+The primary key for the Fielding table are the variables: playerID, yearID, stint, and POS. Using playerID, yearID, and stint did not work like it did in the Batting table. This means the observations are separated based on what the position the player occupied. So if during a single stint the player occupied three different positions there will be three observations - one for each position.
+
+```{r, q1.3}
+Fielding %>%
+      count(playerID, yearID, stint, POS) %>%
+      filter(n > 1)
+```
+
+The primary key for the Pitching is the same as the Batting key: playerID, yearID, stint.
+
+```{r, q1.4}
+Pitching %>%
+      count(playerID, yearID, stint) %>%
+      filter(n > 1)
+```
+
+***
+
+# Problem 2
+
+***
+
+All of the numeric variables in Batting are count variables that can be summed over the career of each player. Create a new table, Batting2, that contains the career statistics for each player.
+
+```{r, p2}
+Batting2 <- Batting %>%
+      select(-(teamID:lgID)) %>%
+      group_by(playerID) %>%
+      summarise(n = n(), G = sum(G), AB = sum(AB), R = sum(R), H = sum(H),
+                X2B = sum(X2B), X3B = sum(X3B), HR = sum(HR), RBI = sum(RBI),
+                SB = sum(SB), CS = sum(CS), BB = sum(BB), SO = sum(SO),
+                IBB = sum(IBB), HBP = sum(HBP), SH = sum(SH), SF = sum(SF),
+                GIDP = sum(GIDP))
+Batting2
+
+tail(Batting2, 10)
+```
+
+***
+
+# Problem 3
+
+***
+
+Repeat the previous problem for the Pitching table (you can ignore the variables BAOpp and ERA).
+
+```{r, p3}
+Pitching2 <- Pitching %>%
+      select(-(yearID:lgID)) %>%
+      group_by(playerID) %>%
+      summarise(W = sum(W), L = sum(L), G = sum(G), GS = sum(GS), CG = sum(CG),
+                SHO = sum(SHO), SV = sum(SV), IPouts = sum(IPouts), H = sum(H), 
+                ER = sum(ER), HR = sum(HR), BB = sum(BB), SO = sum(SO),
+                IBB = sum(IBB), WP = sum(WP), HBP = sum(HBP), BK = sum(BK),
+                BFP = sum(BFP), GF = sum(GF), R = sum(R), SH = sum(SH),
+                SF = sum(SF), GIDP = sum(GIDP))
+Pitching2
+
+tail(Pitching2, 10)
+```
+
+***
+
+# Problem 4
+
+***
+
+The Batting2 table only includes the raw data for each player for each year, and not the common statistics that can be calculated from the raw data (like batting average, plate appearances, slugging percentage, etc…). But there is a function, battingStats(), that adds many of these variables to the table (see ?battingStats). Create a new table using this function: Batting3 <- as_tibble(battingStats(Batting2)). Then, add each player’s first name, last name, given name, and which way he bats and throws to the Batting3 table to create Batting4.
+
+```{r, p4}
+Batting3 <- as_tibble(battingStats(Batting2))
+Batting3
+
+Batting4 <- Batting3 %>%
+      left_join(Master, by = "playerID") %>%
+      select(-(birthYear:deathCity), -(weight:height), -(debut:birthDate)) %>%
+      select(playerID, nameFirst:throws, everything())
+Batting4
+
+tail(Batting4, 10)
+```
+
+***
+
+# Problem 5
+
+***
+
+Some players appear in the Batting4 table and some appear in the Pitching2 table. And if they have both batting and pitching statistics, they appear in both tables. Combine the Batting4 and Pitching2 tables to create a new table of just those players that have both batting statistics (with PA > 0) and pitching statistics.
+
+There are quite a few people in this table, it seems unusual. Only 2,000 less than in the larger Pitching2 table. I think the reason for this is that there are a lot of players with very small numbers of pitching stats which probably represent batters that had to pitch for one inning once in their career in a freak situation. You would expect to see people in this table like Babe Ruth who were known for being good at both pitching and hitting, but I also saw several names that were never pitchers but it turns out that they recorded two outs of pitching in their career such as Ty Cobb, Ted Williams, and Ichiro Suzuki. Also, every pitcher from the National League will be in this table because they do not utilize the designated hitter. So perhaps 7,449 observations is reasonable.
+
+```{r, p5}
+BatPitch <- Batting4 %>%
+      inner_join(Pitching2, by = "playerID") %>%
+      filter(PA > 0)
+BatPitch
+tail(BatPitch, 10)
+```
+
+***
+
+# Problem 6
+
+***
+
+Write a function, HR_rate, that takes one of the Batting tables as an input, calculates the home run rate per game (HR/G), and returns the original table, sorted by the new variable and with the new variable included.
+
+```{r, p6}
+HR_rate <- function(df, x, y){
+      z <- x / y
+      z_name <- "HR/G"
+      df2 <- data.frame(z, df)
+      names(df2) <- c(z_name, names(df))
+      df2 <- dplyr::arrange(df2, desc(z))
+      return(as_tibble(df2))
+}
+
+HR_rate(Batting4, Batting4$HR, Batting4$G)
+
+tail(HR_rate(Batting4, Batting4$HR, Batting4$G))
+```
+
+***
+
+# Problem 7
+
+***
+
+Go back to the original Batting table and recode the levels of the league factor (lgID) to be AL, NL, and Other. Save this in the table Batting5.
+
+```{r, p7}
+Batting5 <- as_tibble(Batting) %>% 
+      mutate(lgID = fct_recode(lgID,
+                               "Other" = "AA",
+                               "Other" = "FL",
+                               "Other" = "NA",
+                               "Other" = "PL",
+                               "Other" = "UA"
+                               ))
+
+Batting5
+Batting5 %>%
+      count(lgID)
+```
+
+***
+
+# Problem 8
+
+***
+
+Consider the Master table. Use the debut variable to create three new integer variables: debutYear, debutMonth, and debutDay. Use these three variables to create a new date variable called debutDate. Finally, create another variable called debutAge that is each player’s age in years at their debut. Save all these variables to the table Master2.
+
+```{r, p8}
+Master2 <- as_tibble(Master) %>%
+      separate(debut, into = c("debutYear", "debutMonth", "debutDay"), sep = "-", convert = TRUE) 
+
+Master2 <- Master2 %>%
+      mutate(debutDate = make_date(debutYear, debutMonth, debutDay))
+
+Master2 <- Master2 %>%
+      mutate(debutAge = (debutDate - birthDate) %/% dyears(1) ) %>%
+      select(playerID, debutYear:debutDay, debutDate, debutAge, everything())
+
+Master2
+
+tail(Master2, 10)
+```
+
+***
+
+# Problem 9
+
+***
+
+In the table Master2, use the character variable birthCountry to create a factor variable called birthContinent that gives the continent of each player’s birth.
+
+```{r, p9}
+country_levels <- c(
+            "Afghanistan", "American Samoa", "Aruba", "At Sea", "Australia", "Austria", "Bahamas", "Belize", "Brazil",
+            "CAN", "China", "Colombia", "Cuba", "Curacao", "Czech Republic", "D.R.", "Denmark", "Finland", "France", "Germany", 
+            "Greece", "Guam", "Honduras", "Hong Kong", "Indonesia", "Ireland", "Italy", "Jamaica", "Japan", "Latvia", "Mexico", 
+            "Netherlands", "Nicaragua", "Norway", "P.R.", "Panama", "Philippines", "Poland", "Russia", "Saudi Arabia", "Singapore", 
+            "Slovakia", "South Korea", "Spain", "Sweden", "Switzerland", "Taiwan", "United Kingdom", "USA", "Viet Nam", "Venezuela", 
+            "V.I.", "NA"
+            )
+                                          
+Master2 <- Master2 %>%
+      mutate(birth_country = factor(birthCountry, levels = country_levels))
+                                          
+Master2 %>% count(birth_country)
+
+Master2 <- Master2 %>%
+      mutate(birthContinent = fct_recode(birth_country,
+                                          "Asia" = "Afghanistan", "Oceania" = "American Samoa", "South America" = "Aruba",
+                                          "NA" = "At Sea", "Australia" = "Australia", "Europe" = "Austria", "North America" = "Bahamas",
+                                          "North America" = "Belize", "South America" = "Brazil", "North America" = "CAN", "Asia"= "China",
+                                          "South America" = "Colombia", "North America" = "Cuba", "South America" = "Curacao", 
+                                          "Europe" = "Czech Republic", "North America" = "D.R.", "Europe" = "Denmark", "Europe" = "Finland", 
+                                          "Europe" = "France", "Europe" = "Germany", "Europe" = "Greece", "Oceania" = "Guam", "North America" = "Honduras",
+                                          "Asia" = "Hong Kong", "Asia" = "Indonesia", "Europe" = "Ireland", "Europe" = "Italy", "North America" = "Jamaica",
+                                          "Asia" = "Japan", "Europe" = "Latvia", "North America" = "Mexico", "Europe" = "Netherlands",
+                                          "North America" = "Nicaragua", "Europe" = "Norway", "North America" = "Panama", "Asia" = "Philippines", 
+                                          "Europe" = "Poland", "Asia" = "Russia", "Asia" = "Saudi Arabia", "Asia" = "Singapore", "Europe" = "Slovakia", 
+                                          "Asia" = "South Korea", "Europe" = "Spain", "Europe" = "Sweden", "Europe" = "Switzerland", "Asia" = "Taiwan", 
+                                          "Europe" = "United Kingdom", "North America" = "USA", "Asia"= "Viet Nam", "South America" = "Venezuela", 
+                                          "North America" = "V.I.", "NA" = "NA", "North America" = "P.R."))
+       
+                                   
+Master2 <- Master2 %>%
+            select(playerID, birthContinent, birth_country, debutYear, debutMonth, debutDay, debutDate, debutAge, everything())
+Master2 %>%
+      count(birthContinent)
+
+Master2
+```
+
+***
+
+# Problem 10
+
+***
+
+Add a new variable to Master2 called Same_Dif that compares the variables bats and throws to see if they are the same or different. Use a for loop to create the new variable with values of either “Same” or “Different”.
+
+I did not include anybody who was a switch hitter in the “Same” category. To me, the question was asking whether or not a given player bats and throws on the same side. Somebody who bats both, would belong in another category, or as in these directions “Different”.
+
+```{r, p10}
+Master2 <- Master2 %>%
+      mutate(bats = fct_recode(bats,
+                               "Other" = "B"
+      ))
+levels(Master2$bats)
+
+Master2 <- Master2 %>%
+      mutate(throws = fct_recode(throws,
+                                 "Other" = "S"))
+levels(Master2$throws)
+
+Master2$bats[which(is.na(Master2$bats))] <- "Other"
+Master2$throws[which(is.na(Master2$throws))] <- "Other"
+
+count(Master2, bats)
+
+count(Master2, throws)
+
+Same_Dif <- vector("character", nrow(Master2))
+for(i in 1:nrow(Master2)){
+      if( (Master2$bats[[i]] == "R") && (Master2$throws[[i]] == "R") ){
+            Same_Dif[[i]] <-  "Same"
+      } 
+      else if ( (Master2$bats[[i]] == "L") && (Master2$throws[[i]] == "L") ){
+            Same_Dif[[i]] <- "Same"
+      }
+      else{
+            Same_Dif[[i]] <- "Different"   
+      }
+}
+as_tibble(Same_Dif)
+
+Master2 <- data.frame(Master2, Same_Dif)
+
+Master2  <- as_tibble(Master2)
+
+Master2 <- Master2 %>%
+      select(playerID, bats:throws, Same_Dif, everything())
+
+Master2 %>%
+      count(Same_Dif)
+
+Master2
+```
+
+***
+
+# Problem 11
+
+***
+
+Repeat the previous problem to create a variable called Same_Dif_map by using one of the map functions rather than a for loop.
+
+```{r eval = FALSE, p11}
+map_if(Master2, (Master2$bats == "R" && Master2$throws == "R")
+                  || (Master2$bats == "L" && Master2$throws == "L"),
+                  Master2$Same_Dif_map <- "Same")
+```
+
+***
+
+
+
